@@ -4,6 +4,7 @@ ASM         := nasm
 CC          := gcc
 LD          := ld
 GRUBMKRESCUE:= grub-mkrescue
+GRUBMKRESCUEFLAGS := --compress=xz
 QEMU        := qemu-system-i386
 
 ASMFLAGS    := -f elf32
@@ -72,7 +73,7 @@ $(ISO_IMAGE): $(KERNEL) boot/grub/grub.cfg
 	@mkdir -p $(ISO_DIR)/boot/grub
 	cp $(KERNEL) $(ISO_DIR)/boot/
 	cp boot/grub/grub.cfg $(ISO_DIR)/boot/grub/
-	$(GRUBMKRESCUE) -o $@ $(ISO_DIR)
+	$(GRUBMKRESCUE) $(GRUBMKRESCUEFLAGS) -o $@ $(ISO_DIR)
 
 run: $(KERNEL)
 	$(QEMU) -kernel $(KERNEL)
