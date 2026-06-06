@@ -5,12 +5,14 @@
 
 # define PAD "                   "
 
-# define CRASHOS_LINE1  PAD "   ____               _      ____  ____\n"
-# define CRASHOS_LINE2  PAD "  / ___|_ __ __ _ ___| |__  / __ \\/ ___|\n"
-# define CRASHOS_LINE3  PAD " | |   | '__/ _` / __| '_ \\| |  | \\___ \\\n"
-# define CRASHOS_LINE4  PAD " | |___| | | (_| \\__ \\ | | | |__| |___) |\n"
-# define CRASHOS_LINE5  PAD "  \\____|_|  \\__,_|___/_| |_|\\____/|____/\n"
-# define CRASHOS_SEP    PAD "---------------------------------------------\n"
-# define CRASHOS_INFO   PAD "                 42 kfs2\n"
+# define BANNER_LINE1  PAD "        _  __                    _\n"
+# define BANNER_LINE2  PAD "       | |/ /___ _ __ _ __   ___| |\n"
+# define BANNER_LINE3  PAD "       | ' // _ \\ '__| '_ \\ / _ \\ |\n"
+# define BANNER_LINE4  PAD "       | . \\  __/ |  | | | |  __/ |\n"
+# define BANNER_LINE5  PAD "       |_|\\_\\___|_|  |_| |_|\\___|_|\n"
+# define BANNER_SEP    PAD "---------------------------------------------\n"
+# define BANNER_INFO   PAD "   42 Nice - kfs2 - by gchinaul and mmalie\n"
+
+void display_banner(void);
 
 #endif

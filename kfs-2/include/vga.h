@@ -2,7 +2,10 @@
 #ifndef VGA_H
 # define VGA_H
 
-/* Escape sequences kprintf color*/
+# define VGA_MEMORY ((volatile ui8_t *)0xB8000)
+# define VGA_WIDTH 80
+# define VGA_HEIGHT 25
+
 # define KESC	'\033'
 # define KRESET	VGA_COLOR_WHITE
 
@@ -24,16 +27,5 @@ enum vga_color {
 	VGA_COLOR_LIGHT_BROWN = 14,
 	VGA_COLOR_WHITE = 15,
 };
-
-static inline uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg) 
-{
-	return fg | bg << 4;
-}
-
-static inline uint16_t vga_entry(unsigned char uc, uint8_t color) 
-{
-	return (uint16_t) uc | (uint16_t) color << 8;
-}
-
 
 #endif

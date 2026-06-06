@@ -1,103 +1,139 @@
-#include "ksh.h"
-#include "io.h"
-#include "terminal.h"
-#include "cursor.h"
+#include "kernel.h"
 
-/* https://users.utcluj.ro/~baruch/sie/labor/PS2/Scan_Codes_Set_1.htm */
+extern term_t term;
+
+keyboard_state_t ks = {0};
+
+/* Scancode maps. Ordered as standard QWERTY layout. Special keys handled separately (CAPS, SHIFT) */
 
 static const char   g_scancode_map[128] =
 {
-    0,   27,  '1', '2', '3', '4', '5', '6', '7', '8', /* 0x00 - 0x09 */
-    '9', '0', '-', '=', '\b', '\t',                    /* 0x0A - 0x0F */
-    'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', /* 0x10 - 0x19 */
-    '[', ']', '\n', 0,                                  /* 0x1A - 0x1D */
-    'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', /* 0x1E - 0x27 */
-    '\'', '`', 0,  '\\',                               /* 0x28 - 0x2B */
-    'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', /* 0x2C - 0x35 */
-    0,   '*', 0,   ' ',                                 /* 0x36 - 0x39 */
+    [0x00] = 0, [0x01] = ESC,
+
+	// First row
+	[0x29] = '`',
+	[0x02] = '1', [0x03] = '2', [0x04] = '3', [0x05] = '4', [0x06] = '5', [0x07] = '6', [0x08] = '7', [0x09] = '8', [0x0A] = '9', [0x0B] = '0',
+	[0x0C] = '-', [0x0D] = '=', [0x0E] = BACKSPACE, 
+	// Second row
+	[0x0F] = TAB,
+	[0x10] = 'q', [0x11] = 'w', [0x12] = 'e', [0x13] = 'r', [0x14] = 't', [0x15] = 'y', [0x16] = 'u', [0x17] = 'i', [0x18] = 'o', [0x19] = 'p',
+	[0x1A] = '[', [0x1B] = ']', [0x2B] = '\\',
+	// Third row
+	[0x1E] = 'a', [0x1F] = 's', [0x20] = 'd', [0x21] = 'f', [0x22] = 'g', [0x23] = 'h', [0x24] = 'j', [0x25] = 'k', [0x26] = 'l',
+	[0x27] = ';', [0x28] = '\'', [0x1C] = ENTER,
+	// Fourth row
+	[0x2C] = 'z', [0x2D] = 'x', [0x2E] = 'c', [0x2F] = 'v', [0x30] = 'b', [0x31] = 'n', [0x32] = 'm',
+	[0x33] = ',', [0x34] = '.', [0x35] = '/',
+	// Fifth row
+	[0x39] = ' ',
+
 };
 
 static const char   g_scancode_shift[128] =
 {
-    0,   27,  '!', '@', '#', '$', '%', '^', '&', '*',
-    '(', ')', '_', '+', '\b', '\t',
-    'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P',
-    '{', '}', '\n', 0,
-    'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':',
-    '"', '~', 0,   '|',
-    'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?',
-    0,   '*', 0,   ' ',
+    [0x00] = 0, [0x01] = ESC,
+	// First row
+	[0x29] = '~',
+	[0x02] = '!', [0x03] = '@', [0x04] = '#', [0x05] = '$', [0x06] = '%', [0x07] = '^', [0x08] = '&', [0x09] = '*', [0x0A] = '(', [0x0B] = ')',
+	[0x0C] = '_', [0x0D] = '+', [0x0E] = BACKSPACE, 
+	// Second row
+	[0x0F] = TAB,
+	[0x10] = 'Q', [0x11] = 'W', [0x12] = 'E', [0x13] = 'R', [0x14] = 'T', [0x15] = 'Y', [0x16] = 'U', [0x17] = 'I', [0x18] = 'O', [0x19] = 'P',
+	[0x1A] = '{', [0x1B] = '}', [0x2B] = '|',
+	// Third row
+	[0x1E] = 'A', [0x1F] = 'S', [0x20] = 'D', [0x21] = 'F', [0x22] = 'G', [0x23] = 'H', [0x24] = 'J', [0x25] = 'K', [0x26] = 'L',
+	[0x27] = ':', [0x28] = '"', [0x1C] = ENTER,
+	// Fourth row
+	[0x2C] = 'Z', [0x2D] = 'X', [0x2E] = 'C', [0x2F] = 'V', [0x30] = 'B', [0x31] = 'N', [0x32] = 'M',
+	[0x33] = '<', [0x34] = '>', [0x35] = '?',
+	// Fifth row
+	[0x39] = ' ',
 };
 
-static int 	g_shift = 0;
-static int  g_caps  = 0;
-
-/* nothing to configure for PS/2 stock */
 void keyboard_init(void)
 {
-	(void)inb(KB_DATA_PORT);
+	(void)inb(PS2_IO_DATA_PORT);
 }
 
-/* read scan code and return the ascii or O */
-char keyboard_getchar(void)
+bool keyboard_poll(void)
 {
-	uint8_t		scode;
-	char        c;
-
-	scode = inb(KB_DATA_PORT);
-	if (scode & KB_RELEASE_MASK)
-	{
-		scode &= ~KB_RELEASE_MASK;
-		if (scode == KB_LSHIFT || scode == KB_RSHIFT)
-			g_shift = 0;
-		return (0);
-	}
-	if (scode == KB_LSHIFT || scode == KB_RSHIFT)
-	{
-		g_shift = 1;
-		return (0);
-	}
-	if (scode == KB_CAPS)
-	{
-		g_caps ^= 1;
-		return (0);
-	}
-	if (scode >= 128)
-		return (0);
-
-	c = (g_shift || g_caps) ? g_scancode_shift[scode] : g_scancode_map[scode];
-	return (c);
+	if ((inb(PS2_IO_STATUS_REGISTER) & 0x01) == 0)
+		return (FALSE);
+	keyboard_handle_scancode();
+	return (TRUE);
 }
 
-extern size_t terminal_row;
-extern size_t terminal_column;
-
-void keyboard_handler(void)
+void keyboard_handle_scancode(void)
 {
-	uint8_t	scode = inb(0x60);
-	
-	if (scode & 0x80)
-		return ;
-	if (scode >= 128)
-		return ;
+	ui8_t		scancode;
 
-	char c = g_scancode_map[scode];
+	scancode = inb(PS2_IO_DATA_PORT);
 
-	if (c == '\b')
+	keyboard_set_flags(scancode);
+
+	if (ks.kb_flags & LALT_FLAG)
 	{
-		if (terminal_column > 0)
-		{
-			terminal_column--;
-			terminal_putentryat(' ', terminal_color, terminal_column, terminal_row);
-			update_cursor(terminal_column, terminal_row);
+		ui8_t screen_index;
+		if (is_screen_switching_key(scancode, &screen_index)) {
+			term_switch_screen(screen_index);
+			return;
 		}
 	}
-	else if (c == '\n')
+
+	if (scancode >= 128)
+		return;
+
+	ks.kb_queue[0] = keyboard_getchar(scancode);
+	return;
+}
+
+void keyboard_set_flags(ui8_t scancode)
+{
+
+	if (scancode == KB_LALT)
 	{
-		terminal_putchar('\n');
+		ks.kb_flags |= LALT_FLAG;
+		return;
 	}
-	else if (c)
+
+	if (scancode == (KB_LALT | KB_RELEASE_MASK))
 	{
-		terminal_putchar(c);
+		ks.kb_flags &= ~LALT_FLAG;
+		return;
 	}
+
+	if (scancode & KB_RELEASE_MASK)
+	{
+		scancode &= ~KB_RELEASE_MASK;
+		if (scancode == KB_LSHIFT || scancode == KB_RSHIFT)
+			ks.kb_flags &= ~SHIFT_FLAG;
+		return;
+	}
+
+	if (scancode == KB_CAPSLOCK)
+	{
+		ks.kb_flags ^= CAPS_FLAG;
+		return;
+	}
+
+	if (scancode == KB_LSHIFT || scancode == KB_RSHIFT)
+		ks.kb_flags |= SHIFT_FLAG;
+}
+
+ui8_t screen_switching_keys[] = {KB_F1, KB_F2, KB_F3, KB_F4};
+
+bool is_screen_switching_key(ui8_t scancode, ui8_t *screen_index) {
+    for (size_t i = 0; i < sizeof(screen_switching_keys); i++) {
+        if (scancode == screen_switching_keys[i]) {
+			*screen_index = i;
+			return (TRUE);
+        }
+    }
+	return (FALSE);
+}
+
+char keyboard_getchar(ui8_t scancode) {
+
+	char c = (ks.kb_flags & (SHIFT_FLAG | CAPS_FLAG)) ? g_scancode_shift[scancode] : g_scancode_map[scancode];
+	return (c);
 }
